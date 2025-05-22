@@ -1,0 +1,983 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sistema de Estoque - Black Concrete</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/quagga@0.12.1/dist/quagga.min.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap');
+        
+        body {
+            font-family: 'Roboto', sans-serif;
+            background-color: #121212;
+            background-image: 
+                linear-gradient(rgba(30, 30, 30, 0.8), rgba(30, 30, 30, 0.8)),
+                url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100" viewBox="0 0 100 100"><rect width="50" height="50" x="0" y="0" fill="%23222222"/><rect width="50" height="50" x="50" y="50" fill="%23222222"/></svg>');
+            color: #e0e0e0;
+        }
+        
+        .concrete-border {
+            border: 2px solid #333;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.5);
+            background-color: #1e1e1e;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .concrete-border::before {
+            content: "";
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: 
+                linear-gradient(45deg, 
+                    transparent 48%, 
+                    rgba(80, 80, 80, 0.3) 49%, 
+                    rgba(80, 80, 80, 0.3) 51%, 
+                    transparent 52%),
+                linear-gradient(-45deg, 
+                    transparent 48%, 
+                    rgba(80, 80, 80, 0.3) 49%, 
+                    rgba(80, 80, 80, 0.3) 51%, 
+                    transparent 52%);
+            background-size: 10px 10px;
+            pointer-events: none;
+        }
+        
+        .product-image {
+            transition: transform 0.5s ease-in-out;
+            border: 2px solid #333;
+            box-shadow: 0 0 8px rgba(0, 0, 0, 0.5);
+        }
+        
+        .animate-float {
+            animation: float 3s ease-in-out infinite alternate;
+        }
+        
+        @keyframes float {
+            0% {
+                transform: translateY(0) rotate(-2deg);
+            }
+            100% {
+                transform: translateY(-10px) rotate(2deg);
+            }
+        }
+        
+        .animate-float2 {
+            animation: float2 4s ease-in-out infinite alternate;
+        }
+        
+        @keyframes float2 {
+            0% {
+                transform: translateY(0) rotate(2deg);
+            }
+            100% {
+                transform: translateY(-8px) rotate(-2deg);
+            }
+        }
+        
+        .animate-float3 {
+            animation: float3 3.5s ease-in-out infinite alternate;
+        }
+        
+        @keyframes float3 {
+            0% {
+                transform: translateY(0) rotate(0deg);
+            }
+            100% {
+                transform: translateY(-12px) rotate(1deg);
+            }
+        }
+        
+        input, textarea, select {
+            background-color: #2d2d2d;
+            border: 1px solid #444;
+            color: #e0e0e0;
+        }
+        
+        input:focus, textarea:focus, select:focus {
+            outline: none;
+            border-color: #777;
+            background-color: #333;
+        }
+        
+        .btn-primary {
+            background-color: #444;
+            color: #fff;
+            transition: all 0.3s;
+        }
+        
+        .btn-primary:hover {
+            background-color: #555;
+            transform: translateY(-2px);
+        }
+        
+        .btn-danger {
+            background-color: #5c2a2a;
+            color: #fff;
+            transition: all 0.3s;
+        }
+        
+        .btn-danger:hover {
+            background-color: #6e3434;
+            transform: translateY(-2px);
+        }
+        
+        .btn-success {
+            background-color: #2a5c3a;
+            color: #fff;
+            transition: all 0.3s;
+        }
+        
+        .btn-success:hover {
+            background-color: #346e44;
+            transform: translateY(-2px);
+        }
+        
+        .table-row:hover {
+            background-color: #2a2a2a;
+        }
+        
+        .modal-overlay {
+            background-color: rgba(0, 0, 0, 0.8);
+        }
+        
+        .barcode {
+            font-family: 'Libre Barcode 128', cursive;
+            font-size: 24px;
+            letter-spacing: 2px;
+        }
+        
+        #scanner-container {
+            position: relative;
+            width: 100%;
+            max-width: 500px;
+            margin: 0 auto;
+        }
+        
+        #scanner-viewport {
+            width: 100%;
+            height: 300px;
+            background-color: #000;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        #scanner-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .scanner-line {
+            width: 80%;
+            height: 2px;
+            background-color: rgba(255, 0, 0, 0.5);
+            position: absolute;
+            animation: scan 2s infinite linear;
+        }
+        
+        @keyframes scan {
+            0% { top: 0; }
+            100% { top: 100%; }
+        }
+        
+        .scanner-border {
+            position: absolute;
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            width: 80%;
+            height: 30%;
+            top: 35%;
+            left: 10%;
+        }
+        
+        #camera-select {
+            width: 100%;
+            margin-top: 10px;
+        }
+    </style>
+    <link href="https://fonts.googleapis.com/css2?family=Libre+Barcode+128&display=swap" rel="stylesheet">
+</head>
+<body class="min-h-screen p-4">
+    <div class="container mx-auto">
+        <header class="text-center mb-8">
+            <h1 class="text-4xl font-bold mb-2 text-gray-200">BLACK CONCRETE STOCK</h1>
+            <p class="text-gray-400">Sistema de Gerenciamento de Estoque</p>
+        </header>
+        
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <!-- Formulário de Cadastro -->
+            <div class="concrete-border p-6 rounded-lg">
+                <h2 class="text-2xl font-semibold mb-4 text-gray-200 border-b border-gray-700 pb-2">Cadastrar Produto</h2>
+                
+                <div class="mb-4">
+                    <label class="block text-gray-400 mb-2">Foto do Produto</label>
+                    <div class="flex items-center justify-center w-full">
+                        <label for="productImage" class="flex flex-col items-center justify-center w-full h-32 border-2 border-dashed border-gray-600 rounded-lg cursor-pointer bg-gray-800 hover:bg-gray-700">
+                            <div class="flex flex-col items-center justify-center pt-5 pb-6">
+                                <svg class="w-8 h-8 mb-4 text-gray-500" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 20 16">
+                                    <path stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 13h3a3 3 0 0 0 0-6h-.025A5.56 5.56 0 0 0 16 6.5 5.5 5.5 0 0 0 5.207 5.021C5.137 5.017 5.071 5 5 5a4 4 0 0 0 0 8h2.167M10 15V6m0 0L8 8m2-2 2 2"/>
+                                </svg>
+                                <p class="mb-2 text-sm text-gray-400"><span class="font-semibold">Clique para enviar</span> ou arraste e solte</p>
+                                <p class="text-xs text-gray-500">PNG, JPG ou JPEG (MAX. 5MB)</p>
+                            </div>
+                            <input id="productImage" type="file" class="hidden" accept="image/*" />
+                        </label>
+                    </div>
+                    <div id="imagePreview" class="mt-2 flex justify-center"></div>
+                </div>
+                
+                <div class="mb-4">
+                    <label class="block text-gray-400 mb-2">Nome do Produto</label>
+                    <input type="text" id="productName" class="w-full p-2 rounded" placeholder="Digite o nome do produto">
+                </div>
+                
+                <div class="grid grid-cols-2 gap-4 mb-4">
+                    <div>
+                        <label class="block text-gray-400 mb-2">Preço (R$)</label>
+                        <input type="number" id="productPrice" class="w-full p-2 rounded" placeholder="0.00" step="0.01" min="0">
+                    </div>
+                    <div>
+                        <label class="block text-gray-400 mb-2">Quantidade</label>
+                        <input type="number" id="productQuantity" class="w-full p-2 rounded" placeholder="0" min="0">
+                    </div>
+                </div>
+                
+                <div class="mb-4">
+                    <label class="block text-gray-400 mb-2">Código de Barras</label>
+                    <div class="flex">
+                        <input type="text" id="productBarcode" class="w-full p-2 rounded-l" placeholder="Digite ou escaneie o código">
+                        <button id="scanBarcode" class="bg-gray-700 px-4 rounded-r hover:bg-gray-600">🔍</button>
+                    </div>
+                    <div id="barcodeDisplay" class="mt-2 text-center barcode hidden"></div>
+                </div>
+                
+                <div class="mb-4">
+                    <label class="block text-gray-400 mb-2">Descrição</label>
+                    <textarea id="productDescription" rows="2" class="w-full p-2 rounded" placeholder="Descrição do produto"></textarea>
+                </div>
+                
+                <div class="flex justify-end space-x-2">
+                    <button id="clearForm" class="btn-danger px-4 py-2 rounded">Limpar</button>
+                    <button id="saveProduct" class="btn-primary px-4 py-2 rounded">Salvar Produto</button>
+                </div>
+            </div>
+            
+            <!-- Lista de Produtos -->
+            <div class="lg:col-span-2 concrete-border p-6 rounded-lg">
+                <div class="flex justify-between items-center mb-4">
+                    <h2 class="text-2xl font-semibold text-gray-200">Estoque</h2>
+                    <div class="flex space-x-2">
+                        <input type="text" id="searchInput" class="p-2 rounded" placeholder="Pesquisar...">
+                        <button id="exportPDF" class="btn-success px-4 py-2 rounded">Exportar PDF</button>
+                    </div>
+                </div>
+                
+                <div class="overflow-x-auto">
+                    <table class="w-full">
+                        <thead>
+                            <tr class="border-b border-gray-700 text-gray-400">
+                                <th class="text-left p-3">Foto</th>
+                                <th class="text-left p-3">Nome</th>
+                                <th class="text-left p-3">Preço</th>
+                                <th class="text-left p-3">Quantidade</th>
+                                <th class="text-left p-3">Código</th>
+                                <th class="text-right p-3">Ações</th>
+                            </tr>
+                        </thead>
+                        <tbody id="productTableBody">
+                            <!-- Produtos serão inseridos aqui via JavaScript -->
+                        </tbody>
+                    </table>
+                </div>
+                
+                <div class="mt-4 text-gray-400">
+                    <p>Total de produtos: <span id="totalProducts" class="font-bold">0</span></p>
+                    <p>Valor total em estoque: R$ <span id="totalValue" class="font-bold">0.00</span></p>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Modal de Edição -->
+    <div id="editModal" class="fixed inset-0 flex items-center justify-center z-50 hidden modal-overlay">
+        <div class="concrete-border p-6 rounded-lg w-full max-w-md mx-4">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-xl font-semibold text-gray-200">Editar Produto</h3>
+                <button id="closeModal" class="text-gray-400 hover:text-gray-200">&times;</button>
+            </div>
+            
+            <div id="editForm">
+                <div class="mb-4">
+                    <label class="block text-gray-400 mb-2">Foto do Produto</label>
+                    <div id="editImagePreview" class="flex justify-center mb-2"></div>
+                    <input type="file" id="editProductImage" class="w-full p-2 rounded" accept="image/*">
+                </div>
+                
+                <div class="mb-4">
+                    <label class="block text-gray-400 mb-2">Nome do Produto</label>
+                    <input type="text" id="editProductName" class="w-full p-2 rounded">
+                </div>
+                
+                <div class="grid grid-cols-2 gap-4 mb-4">
+                    <div>
+                        <label class="block text-gray-400 mb-2">Preço (R$)</label>
+                        <input type="number" id="editProductPrice" class="w-full p-2 rounded" step="0.01" min="0">
+                    </div>
+                    <div>
+                        <label class="block text-gray-400 mb-2">Quantidade</label>
+                        <input type="number" id="editProductQuantity" class="w-full p-2 rounded" min="0">
+                    </div>
+                </div>
+                
+                <div class="mb-4">
+                    <label class="block text-gray-400 mb-2">Código de Barras</label>
+                    <input type="text" id="editProductBarcode" class="w-full p-2 rounded" readonly>
+                </div>
+                
+                <div class="mb-4">
+                    <label class="block text-gray-400 mb-2">Descrição</label>
+                    <textarea id="editProductDescription" rows="2" class="w-full p-2 rounded"></textarea>
+                </div>
+                
+                <div class="flex justify-end space-x-2">
+                    <button id="cancelEdit" class="btn-danger px-4 py-2 rounded">Cancelar</button>
+                    <button id="updateProduct" class="btn-primary px-4 py-2 rounded">Atualizar</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Modal de Código de Barras Existente -->
+    <div id="barcodeModal" class="fixed inset-0 flex items-center justify-center z-50 hidden modal-overlay">
+        <div class="concrete-border p-6 rounded-lg w-full max-w-md mx-4">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-xl font-semibold text-gray-200">Código de Barras Existente</h3>
+                <button id="closeBarcodeModal" class="text-gray-400 hover:text-gray-200">&times;</button>
+            </div>
+            
+            <p class="text-gray-300 mb-4">Já existe um produto cadastrado com este código de barras. Deseja adicionar mais unidades ao estoque?</p>
+            
+            <div class="mb-4">
+                <label class="block text-gray-400 mb-2">Quantidade a Adicionar</label>
+                <input type="number" id="addQuantity" class="w-full p-2 rounded" min="1" value="1">
+            </div>
+            
+            <div class="flex justify-end space-x-2">
+                <button id="cancelAddQuantity" class="btn-danger px-4 py-2 rounded">Cancelar</button>
+                <button id="confirmAddQuantity" class="btn-primary px-4 py-2 rounded">Adicionar</button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Modal do Scanner de Código de Barras -->
+    <div id="scannerModal" class="fixed inset-0 flex items-center justify-center z-50 hidden modal-overlay">
+        <div class="concrete-border p-6 rounded-lg w-full max-w-lg mx-4">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-xl font-semibold text-gray-200">Scanner de Código de Barras</h3>
+                <button id="closeScannerModal" class="text-gray-400 hover:text-gray-200">&times;</button>
+            </div>
+            
+            <div id="scanner-container">
+                <div id="scanner-viewport">
+                    <div id="scanner-overlay">
+                        <div class="scanner-border"></div>
+                        <div class="scanner-line"></div>
+                    </div>
+                </div>
+                <select id="camera-select" class="p-2 rounded bg-gray-800 text-gray-200">
+                    <option value="">Selecione uma câmera</option>
+                </select>
+            </div>
+            
+            <div class="mt-4 text-center">
+                <p class="text-gray-400">Posicione o código de barras dentro da área destacada</p>
+                <p id="scanner-status" class="text-gray-300 mt-2">Aguardando leitura...</p>
+            </div>
+            
+            <div class="flex justify-center mt-4">
+                <button id="stopScanner" class="btn-danger px-4 py-2 rounded">Parar Scanner</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Variáveis globais
+        let products = JSON.parse(localStorage.getItem('products')) || [];
+        let currentEditId = null;
+        let existingProductId = null;
+        let scannerActive = false;
+        
+        // Inicialização
+        document.addEventListener('DOMContentLoaded', function() {
+            renderProductTable();
+            updateStats();
+            
+            // Event Listeners
+            document.getElementById('productImage').addEventListener('change', handleImageUpload);
+            document.getElementById('saveProduct').addEventListener('click', saveProduct);
+            document.getElementById('clearForm').addEventListener('click', clearForm);
+            document.getElementById('searchInput').addEventListener('input', searchProducts);
+            document.getElementById('exportPDF').addEventListener('click', exportToPDF);
+            
+            // Modal
+            document.getElementById('closeModal').addEventListener('click', closeModal);
+            document.getElementById('cancelEdit').addEventListener('click', closeModal);
+            document.getElementById('updateProduct').addEventListener('click', updateProduct);
+            
+            // Barcode Modal
+            document.getElementById('closeBarcodeModal').addEventListener('click', closeBarcodeModal);
+            document.getElementById('cancelAddQuantity').addEventListener('click', closeBarcodeModal);
+            document.getElementById('confirmAddQuantity').addEventListener('click', addQuantityToExisting);
+            
+            // Scanner Modal
+            document.getElementById('scanBarcode').addEventListener('click', openScannerModal);
+            document.getElementById('closeScannerModal').addEventListener('click', closeScannerModal);
+            document.getElementById('stopScanner').addEventListener('click', stopScanner);
+            document.getElementById('camera-select').addEventListener('change', changeCamera);
+            
+            document.getElementById('productBarcode').addEventListener('input', function(e) {
+                updateBarcodeDisplay(e.target.value);
+            });
+            
+            // Iniciar animação das imagens
+            setInterval(animateImages, 3000);
+        });
+        
+        // Funções
+        function handleImageUpload(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+            
+            const reader = new FileReader();
+            reader.onload = function(event) {
+                const preview = document.getElementById('imagePreview');
+                preview.innerHTML = '';
+                
+                const img = document.createElement('img');
+                img.src = event.target.result;
+                img.className = 'product-image w-24 h-24 object-cover rounded-lg animate-float';
+                preview.appendChild(img);
+            };
+            reader.readAsDataURL(file);
+        }
+        
+        function updateBarcodeDisplay(barcode) {
+            const display = document.getElementById('barcodeDisplay');
+            if (barcode) {
+                display.textContent = barcode;
+                display.classList.remove('hidden');
+            } else {
+                display.classList.add('hidden');
+            }
+        }
+        
+        function openScannerModal() {
+            document.getElementById('scannerModal').classList.remove('hidden');
+            initScanner();
+        }
+        
+        function closeScannerModal() {
+            stopScanner();
+            document.getElementById('scannerModal').classList.add('hidden');
+        }
+        
+        function initScanner() {
+            // Limpar seleção de câmera
+            const cameraSelect = document.getElementById('camera-select');
+            cameraSelect.innerHTML = '<option value="">Selecione uma câmera</option>';
+            
+            // Configurar QuaggaJS
+            Quagga.init({
+                inputStream: {
+                    name: "Live",
+                    type: "LiveStream",
+                    target: document.querySelector('#scanner-viewport'),
+                    constraints: {
+                        width: 480,
+                        height: 320,
+                        facingMode: "environment" // Usar câmera traseira
+                    },
+                },
+                decoder: {
+                    readers: ["ean_reader", "ean_8_reader", "code_128_reader", "code_39_reader", "code_39_vin_reader", "codabar_reader", "upc_reader", "upc_e_reader"]
+                },
+                locate: true
+            }, function(err) {
+                if (err) {
+                    console.error(err);
+                    document.getElementById('scanner-status').textContent = "Erro ao iniciar scanner: " + err.message;
+                    return;
+                }
+                
+                scannerActive = true;
+                console.log("Scanner inicializado");
+                Quagga.start();
+                
+                // Listar câmeras disponíveis
+                navigator.mediaDevices.enumerateDevices()
+                    .then(devices => {
+                        const videoDevices = devices.filter(device => device.kind === 'videoinput');
+                        videoDevices.forEach(device => {
+                            const option = document.createElement('option');
+                            option.value = device.deviceId;
+                            option.text = device.label || `Câmera ${cameraSelect.length + 1}`;
+                            cameraSelect.appendChild(option);
+                        });
+                    });
+            });
+            
+            Quagga.onDetected(function(result) {
+                const code = result.codeResult.code;
+                document.getElementById('scanner-status').textContent = "Código lido: " + code;
+                document.getElementById('productBarcode').value = code;
+                updateBarcodeDisplay(code);
+                
+                // Parar scanner após leitura bem-sucedida
+                setTimeout(() => {
+                    stopScanner();
+                    document.getElementById('scannerModal').classList.add('hidden');
+                }, 1000);
+            });
+            
+            Quagga.onProcessed(function(result) {
+                const drawingCtx = Quagga.canvas.ctx.overlay;
+                const drawingCanvas = Quagga.canvas.dom.overlay;
+                
+                if (result) {
+                    if (result.boxes) {
+                        drawingCtx.clearRect(0, 0, parseInt(drawingCanvas.getAttribute("width")), parseInt(drawingCanvas.getAttribute("height")));
+                        result.boxes.filter(function(box) {
+                            return box !== result.box;
+                        }).forEach(function(box) {
+                            Quagga.ImageDebug.drawPath(box, {x: 0, y: 1}, drawingCtx, {color: "green", lineWidth: 2});
+                        });
+                    }
+                    
+                    if (result.box) {
+                        Quagga.ImageDebug.drawPath(result.box, {x: 0, y: 1}, drawingCtx, {color: "blue", lineWidth: 2});
+                    }
+                    
+                    if (result.codeResult && result.codeResult.code) {
+                        Quagga.ImageDebug.drawPath(result.line, {x: 'x', y: 'y'}, drawingCtx, {color: 'red', lineWidth: 3});
+                    }
+                }
+            });
+        }
+        
+        function stopScanner() {
+            if (scannerActive) {
+                Quagga.stop();
+                scannerActive = false;
+                console.log("Scanner parado");
+            }
+        }
+        
+        function changeCamera() {
+            const deviceId = document.getElementById('camera-select').value;
+            if (!deviceId) return;
+            
+            stopScanner();
+            
+            Quagga.init({
+                inputStream: {
+                    name: "Live",
+                    type: "LiveStream",
+                    target: document.querySelector('#scanner-viewport'),
+                    constraints: {
+                        width: 480,
+                        height: 320,
+                        deviceId: deviceId
+                    },
+                },
+                decoder: {
+                    readers: ["ean_reader", "ean_8_reader", "code_128_reader", "code_39_reader", "code_39_vin_reader", "codabar_reader", "upc_reader", "upc_e_reader"]
+                },
+                locate: true
+            }, function(err) {
+                if (err) {
+                    console.error(err);
+                    document.getElementById('scanner-status').textContent = "Erro ao mudar câmera: " + err.message;
+                    return;
+                }
+                
+                scannerActive = true;
+                console.log("Scanner reiniciado com nova câmera");
+                Quagga.start();
+            });
+        }
+        
+        function saveProduct() {
+            const name = document.getElementById('productName').value.trim();
+            const price = parseFloat(document.getElementById('productPrice').value);
+            const quantity = parseInt(document.getElementById('productQuantity').value) || 0;
+            const barcode = document.getElementById('productBarcode').value.trim();
+            const description = document.getElementById('productDescription').value.trim();
+            
+            // Verificar se o código de barras já existe
+            if (barcode) {
+                const existingProduct = products.find(p => p.barcode === barcode);
+                if (existingProduct) {
+                    existingProductId = existingProduct.id;
+                    document.getElementById('barcodeModal').classList.remove('hidden');
+                    return;
+                }
+            }
+            
+            // Validação
+            if (!name || isNaN(price) || price <= 0) {
+                alert('Por favor, preencha pelo menos o nome e o preço do produto.');
+                return;
+            }
+            
+            // Obter imagem
+            const imageInput = document.getElementById('productImage');
+            let imageUrl = '';
+            if (imageInput.files.length > 0) {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    imageUrl = e.target.result;
+                    createProduct(name, price, quantity, barcode, description, imageUrl);
+                };
+                reader.readAsDataURL(imageInput.files[0]);
+            } else {
+                createProduct(name, price, quantity, barcode, description, imageUrl);
+            }
+        }
+        
+        function createProduct(name, price, quantity, barcode, description, imageUrl) {
+            const newProduct = {
+                id: Date.now().toString(),
+                name,
+                price,
+                quantity,
+                barcode,
+                description,
+                imageUrl,
+                createdAt: new Date().toISOString()
+            };
+            
+            products.push(newProduct);
+            saveToLocalStorage();
+            renderProductTable();
+            updateStats();
+            clearForm();
+            
+            // Adicionar animação à nova imagem
+            if (imageUrl) {
+                const newImage = document.querySelector(`[data-id="${newProduct.id}"] .product-image`);
+                if (newImage) {
+                    const animations = ['animate-float', 'animate-float2', 'animate-float3'];
+                    newImage.classList.add(animations[Math.floor(Math.random() * animations.length)]);
+                }
+            }
+        }
+        
+        function addQuantityToExisting() {
+            const quantityToAdd = parseInt(document.getElementById('addQuantity').value) || 1;
+            
+            const productIndex = products.findIndex(p => p.id === existingProductId);
+            if (productIndex !== -1) {
+                products[productIndex].quantity += quantityToAdd;
+                saveToLocalStorage();
+                renderProductTable();
+                updateStats();
+            }
+            
+            closeBarcodeModal();
+            clearForm();
+        }
+        
+        function clearForm() {
+            document.getElementById('productName').value = '';
+            document.getElementById('productPrice').value = '';
+            document.getElementById('productQuantity').value = '';
+            document.getElementById('productBarcode').value = '';
+            document.getElementById('productDescription').value = '';
+            document.getElementById('imagePreview').innerHTML = '';
+            document.getElementById('productImage').value = '';
+            document.getElementById('barcodeDisplay').classList.add('hidden');
+            existingProductId = null;
+        }
+        
+        function renderProductTable(filteredProducts = null) {
+            const tableBody = document.getElementById('productTableBody');
+            tableBody.innerHTML = '';
+            
+            const productsToRender = filteredProducts || products;
+            
+            if (productsToRender.length === 0) {
+                tableBody.innerHTML = `
+                    <tr>
+                        <td colspan="6" class="text-center py-4 text-gray-400">Nenhum produto cadastrado</td>
+                    </tr>
+                `;
+                return;
+            }
+            
+            productsToRender.forEach(product => {
+                const row = document.createElement('tr');
+                row.className = 'table-row border-b border-gray-700';
+                row.dataset.id = product.id;
+                
+                // Escolher uma animação aleatória para a imagem
+                const animations = ['animate-float', 'animate-float2', 'animate-float3'];
+                const randomAnimation = animations[Math.floor(Math.random() * animations.length)];
+                
+                row.innerHTML = `
+                    <td class="p-3">
+                        ${product.imageUrl ? 
+                            `<img src="${product.imageUrl}" alt="${product.name}" class="product-image w-12 h-12 object-cover rounded-lg ${randomAnimation}">` : 
+                            '<div class="w-12 h-12 bg-gray-700 rounded-lg flex items-center justify-center text-gray-400">📷</div>'}
+                    </td>
+                    <td class="p-3">${product.name}</td>
+                    <td class="p-3">R$ ${product.price.toFixed(2)}</td>
+                    <td class="p-3 ${product.quantity <= 5 ? 'text-red-400' : ''}">${product.quantity}</td>
+                    <td class="p-3">
+                        ${product.barcode ? `<span class="barcode">${product.barcode}</span>` : 'N/A'}
+                    </td>
+                    <td class="p-3 text-right">
+                        <button class="edit-btn btn-primary px-2 py-1 rounded mr-1" data-id="${product.id}">✏️</button>
+                        <button class="delete-btn btn-danger px-2 py-1 rounded" data-id="${product.id}">🗑️</button>
+                    </td>
+                `;
+                
+                tableBody.appendChild(row);
+            });
+            
+            // Adicionar event listeners aos botões
+            document.querySelectorAll('.edit-btn').forEach(btn => {
+                btn.addEventListener('click', function() {
+                    editProduct(this.dataset.id);
+                });
+            });
+            
+            document.querySelectorAll('.delete-btn').forEach(btn => {
+                btn.addEventListener('click', function() {
+                    deleteProduct(this.dataset.id);
+                });
+            });
+        }
+        
+        function editProduct(id) {
+            const product = products.find(p => p.id === id);
+            if (!product) return;
+            
+            currentEditId = id;
+            
+            // Preencher o modal de edição
+            const editImagePreview = document.getElementById('editImagePreview');
+            editImagePreview.innerHTML = '';
+            
+            if (product.imageUrl) {
+                const img = document.createElement('img');
+                img.src = product.imageUrl;
+                img.className = 'product-image w-24 h-24 object-cover rounded-lg';
+                editImagePreview.appendChild(img);
+            } else {
+                editImagePreview.innerHTML = '<div class="w-24 h-24 bg-gray-700 rounded-lg flex items-center justify-center text-gray-400">📷</div>';
+            }
+            
+            document.getElementById('editProductName').value = product.name;
+            document.getElementById('editProductPrice').value = product.price;
+            document.getElementById('editProductQuantity').value = product.quantity;
+            document.getElementById('editProductBarcode').value = product.barcode || '';
+            document.getElementById('editProductDescription').value = product.description || '';
+            
+            // Mostrar o modal
+            document.getElementById('editModal').classList.remove('hidden');
+        }
+        
+        function updateProduct() {
+            const name = document.getElementById('editProductName').value.trim();
+            const price = parseFloat(document.getElementById('editProductPrice').value);
+            const quantity = parseInt(document.getElementById('editProductQuantity').value) || 0;
+            const barcode = document.getElementById('editProductBarcode').value.trim();
+            const description = document.getElementById('editProductDescription').value.trim();
+            
+            // Validação
+            if (!name || isNaN(price) || price <= 0) {
+                alert('Por favor, preencha pelo menos o nome e o preço do produto.');
+                return;
+            }
+            
+            const productIndex = products.findIndex(p => p.id === currentEditId);
+            if (productIndex === -1) return;
+            
+            // Atualizar produto
+            products[productIndex].name = name;
+            products[productIndex].price = price;
+            products[productIndex].quantity = quantity;
+            products[productIndex].barcode = barcode;
+            products[productIndex].description = description;
+            
+            // Atualizar imagem se uma nova foi selecionada
+            const imageInput = document.getElementById('editProductImage');
+            if (imageInput.files.length > 0) {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    products[productIndex].imageUrl = e.target.result;
+                    saveToLocalStorage();
+                    renderProductTable();
+                    updateStats();
+                    closeModal();
+                };
+                reader.readAsDataURL(imageInput.files[0]);
+            } else {
+                saveToLocalStorage();
+                renderProductTable();
+                updateStats();
+                closeModal();
+            }
+        }
+        
+        function deleteProduct(id) {
+            if (confirm('Tem certeza que deseja excluir este produto?')) {
+                products = products.filter(p => p.id !== id);
+                saveToLocalStorage();
+                renderProductTable();
+                updateStats();
+            }
+        }
+        
+        function searchProducts() {
+            const searchTerm = document.getElementById('searchInput').value.toLowerCase();
+            
+            if (!searchTerm) {
+                renderProductTable();
+                return;
+            }
+            
+            const filteredProducts = products.filter(product => 
+                product.name.toLowerCase().includes(searchTerm) ||
+                (product.barcode && product.barcode.toLowerCase().includes(searchTerm)) ||
+                (product.description && product.description.toLowerCase().includes(searchTerm))
+            );
+            
+            renderProductTable(filteredProducts);
+        }
+        
+        function updateStats() {
+            document.getElementById('totalProducts').textContent = products.length;
+            
+            const totalValue = products.reduce((sum, product) => sum + (product.price * product.quantity), 0);
+            document.getElementById('totalValue').textContent = totalValue.toFixed(2);
+        }
+        
+        function saveToLocalStorage() {
+            localStorage.setItem('products', JSON.stringify(products));
+        }
+        
+        function closeModal() {
+            document.getElementById('editModal').classList.add('hidden');
+            currentEditId = null;
+        }
+        
+        function closeBarcodeModal() {
+            document.getElementById('barcodeModal').classList.add('hidden');
+            existingProductId = null;
+        }
+        
+        function animateImages() {
+            const images = document.querySelectorAll('.product-image');
+            images.forEach(img => {
+                // Remover todas as classes de animação
+                img.classList.remove('animate-float', 'animate-float2', 'animate-float3');
+                
+                // Adicionar uma nova animação aleatória
+                const animations = ['animate-float', 'animate-float2', 'animate-float3'];
+                const randomAnimation = animations[Math.floor(Math.random() * animations.length)];
+                img.classList.add(randomAnimation);
+            });
+        }
+        
+        function exportToPDF() {
+            const { jsPDF } = window.jspdf;
+            const doc = new jsPDF();
+            
+            // Título
+            doc.setFontSize(20);
+            doc.setTextColor(50, 50, 50);
+            doc.text('Relatório de Estoque - Black Concrete', 105, 20, { align: 'center' });
+            
+            // Data
+            doc.setFontSize(12);
+            doc.text(`Gerado em: ${new Date().toLocaleDateString()}`, 105, 30, { align: 'center' });
+            
+            // Cabeçalho da tabela
+            doc.setFontSize(12);
+            doc.setTextColor(255, 255, 255);
+            doc.setFillColor(60, 60, 60);
+            doc.rect(10, 40, 190, 10, 'F');
+            doc.text('Produto', 15, 46);
+            doc.text('Preço', 80, 46);
+            doc.text('Quantidade', 120, 46);
+            doc.text('Código', 150, 46);
+            doc.text('Valor Total', 180, 46, { align: 'right' });
+            
+            // Linhas da tabela
+            let y = 50;
+            products.forEach((product, index) => {
+                if (y > 270) { // Nova página se necessário
+                    doc.addPage();
+                    y = 20;
+                    
+                    // Cabeçalho da tabela em nova página
+                    doc.setFontSize(12);
+                    doc.setTextColor(255, 255, 255);
+                    doc.setFillColor(60, 60, 60);
+                    doc.rect(10, y, 190, 10, 'F');
+                    doc.text('Produto', 15, y + 6);
+                    doc.text('Preço', 80, y + 6);
+                    doc.text('Quantidade', 120, y + 6);
+                    doc.text('Código', 150, y + 6);
+                    doc.text('Valor Total', 180, y + 6, { align: 'right' });
+                    y += 10;
+                }
+                
+                doc.setFontSize(10);
+                doc.setTextColor(0, 0, 0);
+                
+                // Alternar cores das linhas
+                if (index % 2 === 0) {
+                    doc.setFillColor(240, 240, 240);
+                } else {
+                    doc.setFillColor(220, 220, 220);
+                }
+                
+                doc.rect(10, y, 190, 8, 'F');
+                doc.text(product.name.substring(0, 30), 15, y + 6);
+                doc.text(`R$ ${product.price.toFixed(2)}`, 80, y + 6);
+                doc.text(product.quantity.toString(), 120, y + 6);
+                doc.text(product.barcode || 'N/A', 150, y + 6);
+                doc.text(`R$ ${(product.price * product.quantity).toFixed(2)}`, 180, y + 6, { align: 'right' });
+                
+                y += 8;
+            });
+            
+            // Totais
+            y += 10;
+            doc.setFontSize(12);
+            doc.setTextColor(0, 0, 0);
+            doc.text(`Total de Produtos: ${products.length}`, 15, y);
+            
+            const totalValue = products.reduce((sum, product) => sum + (product.price * product.quantity), 0);
+            doc.text(`Valor Total em Estoque: R$ ${totalValue.toFixed(2)}`, 15, y + 8);
+            
+            // Salvar PDF
+            doc.save(`estoque_black_concrete_${new Date().toISOString().slice(0, 10)}.pdf`);
+        }
+    </script>
+</body>
+</html>
